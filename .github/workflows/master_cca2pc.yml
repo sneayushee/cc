@@ -63,7 +63,6 @@ jobs:
 
       - name: Unzip artifact for deployment
         run: unzip release.zip
-
       
       - name: Login to Azure
         uses: azure/login@v2
@@ -72,10 +71,41 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_10619C2F13A542BEA1C1994961BD2D8A }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_14A5FACD245F4F14A9BDBC78F97BF346 }}
 
+      - name: Wait for SCM to stabilize
+        run: |
+          echo "Waiting 30 seconds for SCM to stabilize..."
+          sleep 30
+
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
         with:
           app-name: 'cca2pc'
           slot-name: 'Production'
-          
+        continue-on-error: true
+
+      - name: Check deployment status and wait if needed
+        if: steps.deploy-to-webapp.outcome == 'failure'
+        run: |
+          echo "Initial deployment failed. Waiting 2 minutes before retry..."
+          sleep 120
+          echo "Retrying deployment..."
+
+      - name: 'Retry deployment if first attempt failed'
+        if: steps.deploy-to-webapp.outcome == 'failure'
+        uses: azure/webapps-deploy@v3
+        id: retry-deploy
+        with:
+          app-name: 'cca2pc'
+          slot-name: 'Production'
+
+      - name: Verify deployment
+        run: |
+          echo "Deployment completed. Waiting 30 seconds for application to start..."
+          sleep 30
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://cca2pc-a8bxbvdjbjgraggx.southindia-01.azurewebsites.net)
+          if [ $STATUS -ge 200 ] && [ $STATUS -lt 300 ]; then
+            echo "Application is running successfully"
+          else
+            echo "Warning: Application may not be running correctly. Status code: $STATUS"
+          fi
