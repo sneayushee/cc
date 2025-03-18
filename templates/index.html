@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product Catalogue</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Product Catalogue</h1>
+        
+        <div class="card">
+            <h2>Add New Product</h2>
+            <form id="product-form">
+                <div class="form-group">
+                    <label for="name">Product Name:</label>
+                    <input type="text" id="name" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label for="price">Price ($):</label>
+                    <input type="number" id="price" name="price" step="0.01" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="image">Image:</label>
+                    <input type="file" id="image" required>
+                </div>
+                <button type="submit" class="btn">Add Product</button>
+            </form>
+            <div id="message" class="message"></div>
+        </div>
+        
+        <div class="card">
+            <h2>Product List</h2>
+            <button id="refresh-btn" class="btn btn-secondary">Refresh List</button>
+            <div id="products-container">
+                <table id="products-table">
+                    <thead>
+                        <tr>
+                            <th>Image</th>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Price ($)</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="products-list">
+                        <!-- Products will be dynamically loaded here -->
+                    </tbody>
+                </table>
+                <div id="no-products" class="hidden">No products found.</div>
+            </div>
+        </div>
+        
+            
+            <!-- Top 5 Characters Section Moved Here -->
+            <!-- <div class="form-group">
+                <label for="manga-name">Enter Manga Name:</label>
+                <input type="text" id="manga-name" name="manga-name" required>
+            </div>
+            <button id="fetch-characters" class="btn">Get Characters</button>
+            <ul id="characters-list"></ul> -->
+        </div>
+        
+        
+    </div>
+
+    <script>
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            const productForm = document.getElementById('product-form');
+            const messageDiv = document.getElementById('message');
+            const productsList = document.getElementById('products-list');
+            const noProductsDiv = document.getElementById('no-products');
+            const refreshBtn = document.getElementById('refresh-btn');
+
+            // Load products when page loads
+            loadProducts();
+
+            // Add product form submission
+            if (productForm) {
+                productForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+
+                    const formData = new FormData();
+                    formData.append('name', document.getElementById('name').value);
+                    formData.append('price', document.getElementById('price').value);
+                    formData.append('image', document.getElementById('image').files[0]);
+
+                    fetch('/add_product', {
+                        method: 'POST',
+                        body: formData  
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        messageDiv.textContent = data.message || data.error;
+                        messageDiv.className = data.error ? 'message error' : 'message success';
+
+                        if (!data.error) {
+                            productForm.reset();
+                            loadProducts();
+                        }
+
+                        setTimeout(() => {
+                            messageDiv.textContent = '';
+                            messageDiv.className = 'message';
+                        }, 3000);
+                    })
+                    .catch(error => {
+                        messageDiv.textContent = 'Error adding product: ' + error.message;
+                        messageDiv.className = 'message error';
+                    });
+                });
+            }
+
+
+            // Refresh button event
+            refreshBtn.addEventListener('click', loadProducts);
+
+            // Function to load products
+            function loadProducts() {
+                fetch('/list_products')
+                .then(response => response.json())
+                .then(data => {
+                    productsList.innerHTML = '';
+
+                    if (data.products && data.products.length > 0) {
+                        noProductsDiv.classList.add('hidden');
+                        
+                        data.products.forEach(product => {
+                            const row = document.createElement('tr');
+                            row.innerHTML = `
+                                <td><img src="/get_image/${product.blob_name}" alt="${product.name}" class="product-image"></td>
+                                <td>${product.id}</td>
+                                <td>${product.name}</td>
+                                <td>$${product.price.toFixed(2)}</td>
+                                <td>
+                                    <button class="btn btn-danger delete-product" data-id="${product.id}"><i class="fas fa-trash-alt"></i> Delete</button>
+                                </td>
+                            `;
+                            
+                            productsList.appendChild(row);
+
+                            // Add a row for character results
+                            const charRow = document.createElement('tr');
+                            charRow.innerHTML = `
+                                <td colspan="4">
+                                    <ul id="characters-${product.id}" class="characters-list hidden"></ul>
+                                </td>
+                            `;
+                            productsList.appendChild(charRow);
+                        });
+
+                        // Attach event listeners to "Get Characters" buttons
+                        document.querySelectorAll(".fetch-characters").forEach(button => {
+                            button.addEventListener("click", function() {
+                                const mangaName = this.getAttribute("data-name");
+                                const productId = this.getAttribute("data-id");
+                                fetchTopCharacters(mangaName, productId);
+                            });
+                        });
+
+                        // Attach event listeners to "Delete" buttons
+                        document.querySelectorAll(".delete-product").forEach(button => {
+                            button.addEventListener("click", function() {
+                                const productId = this.getAttribute("data-id");
+                                deleteProduct(productId);
+                            });
+                        });
+                    } else {
+                        noProductsDiv.classList.remove('hidden');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading products:', error);
+                    noProductsDiv.textContent = 'Error loading products.';
+                    noProductsDiv.classList.remove('hidden');
+                });
+            }
+
+            // Function to fetch characters for a given manga
+            function fetchTopCharacters(mangaName, productId) {
+                fetch('/get-characters', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ manga_name: mangaName })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    const charList = document.getElementById(`characters-${productId}`);
+                    charList.innerHTML = ''; // Clear previous results
+                    charList.classList.remove("hidden");
+
+                    data.characters.split("\n").forEach(char => {
+                        if (char.trim()) {
+                            const li = document.createElement('li');
+                            li.textContent = char;
+                            charList.appendChild(li);
+                        }
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching characters:', error);
+                });
+            }
+
+            // Function to delete a product
+            function deleteProduct(productId) {
+                fetch(`/delete_product/${productId}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        loadProducts(); // Refresh the product list
+                    } else {
+                        console.error('Error deleting product:', data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting product:', error);
+                });
+            }
+        });
+        </script>
+    </script>
+</body>
+</html>

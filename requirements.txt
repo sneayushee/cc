@@ -1,0 +1,7 @@
+flask
+azure-storage-blob
+python-dotenv
+openai
+pillow
+pyodbc
+gunicorn
